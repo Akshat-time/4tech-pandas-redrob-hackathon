@@ -317,6 +317,12 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     if skill_hits >= 6 and non_product_title and role_experience < 2.0:
         keyword_stuffer_penalty = 0.28
 
+    title_alignment = 0.0
+    if any(keyword in title_text for keyword in ["ai", "ml", "machine learning", "search", "ranking", "retrieval", "recommendation", "data scientist", "embeddings", "vector", "llm"]):
+        title_alignment += 0.05
+    if non_product_title and role_experience < 2.0 and skill_hits < 4:
+        title_alignment -= 0.08
+
     location_text = f"{profile.get('location', '')} {profile.get('country', '')}"
     location_hits = count_keywords(location_text.lower(), LOCATION_HINTS)
     location_score = 0.15 if location_hits else 0.0
@@ -391,21 +397,22 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     activity_score = clamp(activity_balance / 3.0, 0.0, 1.0) * 0.015
 
     raw_score = (
-        0.22 * experience_score
-        + 0.18 * clamp(role_hits / 4.0, 0.0, 1.0)
-        + 0.18 * clamp((role_experience + evidence_hits + 0.75 * product_hits) / 12.0, 0.0, 1.0)
-        + 0.12 * clamp(skill_hits / 5.0, 0.0, 1.0)
-        + 0.09 * assessment_score
+        0.24 * experience_score
+        + 0.21 * clamp(role_hits / 4.0, 0.0, 1.0)
+        + 0.22 * clamp((role_experience + evidence_hits + 0.75 * product_hits) / 12.0, 0.0, 1.0)
+        + 0.10 * clamp(skill_hits / 5.0, 0.0, 1.0)
+        + 0.12 * assessment_score
         + location_score
         + notice_score
         + salary_score
         + signup_score
-        + behavior_score
+        + 0.85 * behavior_score
         + recency_score
         + endorse
         + connections
         + activity_score
-        + 0.08 * clamp((profile.get("years_of_experience") or 0.0) / 15.0, 0.0, 1.0)
+        + title_alignment
+        + 0.05 * clamp((profile.get("years_of_experience") or 0.0) / 15.0, 0.0, 1.0)
     )
 
     raw_score -= consulting_penalty
@@ -423,6 +430,8 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
         top_reasons.append(f"{skill_hits} relevant AI skills")
     if assessment_score >= 0.55:
         top_reasons.append("strong Redrob skill assessments")
+    if title_alignment > 0.04:
+        top_reasons.append("title aligned with JD")
     if behavior_score >= 0.35:
         top_reasons.append("strong engagement signals")
     if location_hits or signals.get("willing_to_relocate"):
