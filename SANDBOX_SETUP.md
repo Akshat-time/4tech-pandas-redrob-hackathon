@@ -6,7 +6,7 @@ dependencies in `requirements.txt`.
 ## What is already done
 
 - The ranker is implemented in `India_runs_data_and_ai_challenge/ranker.py`.
-- The demo app is implemented in `streamlit_app.py`.
+- The demo app is implemented in `app.py`.
 - The repository is published on GitHub.
 - The submission metadata file exists at `submission_metadata.yaml`.
 
@@ -32,7 +32,7 @@ dependencies in `requirements.txt`.
 - Sign in to Streamlit Cloud with your GitHub account.
 - Choose `New app`.
 - Select the GitHub repo.
-- Set the main file path to `streamlit_app.py`.
+- Set the main file path to `app.py`.
 - Deploy.
 
 ## If you use Hugging Face Spaces
@@ -40,7 +40,7 @@ dependencies in `requirements.txt`.
 - Create a new Space.
 - Choose the Streamlit template.
 - Link the GitHub repo or upload the files.
-- Make sure the entry file is `streamlit_app.py`.
+- Make sure the entry file is `app.py`.
 - Deploy.
 
 ## What I cannot do for you
