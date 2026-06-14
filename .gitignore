@@ -1,6 +1,7 @@
 .DS_Store
 __pycache__/
 **/__pycache__/
+sample_submission_test.csv
 India_runs_data_and_ai_challenge/candidates.jsonl
 India_runs_data_and_ai_challenge/submission.csv
 India_runs_data_and_ai_challenge/sample_submission_test.csv

@@ -228,6 +228,47 @@ def months_since(datestr: str, today: date | None = None) -> int:
     return max(0, (today.year - parsed.year) * 12 + today.month - parsed.month)
 
 
+def numeric_signal(value, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def score_skill_assessments(candidate: dict, role_text: str) -> float:
+    assessments = candidate.get("redrob_signals", {}).get("skill_assessment_scores", {})
+    if not isinstance(assessments, dict) or not assessments:
+        return 0.0
+
+    keywords = [
+        "embedding",
+        "retrieval",
+        "search",
+        "ranking",
+        "recommendation",
+        "llm",
+        "nlp",
+        "vector",
+        "python",
+        "evaluation",
+        "fine-tuning",
+    ]
+
+    total = 0.0
+    count = 0
+    for skill_name, score in assessments.items():
+        score_value = numeric_signal(score, 0.0)
+        skill_name_l = str(skill_name).lower()
+        if skill_name_l in role_text or any(keyword in skill_name_l for keyword in keywords):
+            total += clamp(score_value / 100.0, 0.0, 1.0)
+            count += 1
+
+    if count:
+        return total / count
+
+    return sum(clamp(numeric_signal(score, 0.0) / 100.0, 0.0, 1.0) for score in assessments.values()) / len(assessments)
+
+
 def score_candidate(candidate: dict) -> tuple[float, str]:
     profile = candidate.get("profile", {})
     signals = candidate.get("redrob_signals", {})
@@ -250,11 +291,18 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
         experience_score += 0.15
     experience_score = clamp(experience_score)
 
+    signup_score = 0.0
+    signup_date = signals.get("signup_date")
+    if signup_date:
+        signup_months = months_since(signup_date)
+        signup_score = clamp(1.0 - signup_months / 36.0, 0.0, 1.0) * 0.04
+
     role_hits = count_keywords(title_text, TARGET_ROLE_KEYWORDS)
     evidence_hits = count_keywords(text, PRODUCTION_EVIDENCE)
     product_hits = count_keywords(text, PRODUCT_COMPANY_HINTS)
     role_experience = sum(weight for keyword, weight in ROLE_EXPERIENCE_KEYWORDS.items() if keyword in text)
     skill_hits = sum(1 for skill in skills if skill.get("name", "").strip().lower() in HIGH_ENGAGEMENT_SKILLS)
+    assessment_score = score_skill_assessments(candidate, text)
 
     consulting_only = bool(history) and all(
         any(company_hint in (entry.get("company", "").lower()) for company_hint in CONSULTING_COMPANIES)
@@ -280,21 +328,52 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     if preferred_mode in {"hybrid", "flexible", "onsite"}:
         location_score += 0.05
 
+    notice_period = numeric_signal(signals.get("notice_period_days"), 180.0)
+    if notice_period <= 15:
+        notice_score = 0.05
+    elif notice_period <= 30:
+        notice_score = 0.045
+    elif notice_period <= 60:
+        notice_score = 0.03
+    elif notice_period <= 90:
+        notice_score = 0.015
+    else:
+        notice_score = 0.0
+
+    salary = signals.get("expected_salary_range_inr_lpa", {}) or {}
+    salary_min = numeric_signal(salary.get("min"), 0.0)
+    salary_max = numeric_signal(salary.get("max"), salary_min)
+    salary_width = max(0.0, salary_max - salary_min)
+    salary_score = 0.0
+    if salary_max > 0:
+        if salary_max <= 30:
+            salary_score = 0.04
+        elif salary_max <= 45:
+            salary_score = 0.03
+        elif salary_max <= 60:
+            salary_score = 0.015
+        else:
+            salary_score = 0.0
+        if salary_width <= 20:
+            salary_score += 0.01
+
     behavior_score = 0.0
     if signals.get("open_to_work_flag"):
         behavior_score += 0.10
-    behavior_score += clamp(float(signals.get("recruiter_response_rate") or 0.0), 0.0, 1.0) * 0.22
-    behavior_score += clamp(1.0 - float(signals.get("avg_response_time_hours") or 0.0) / 168.0, 0.0, 1.0) * 0.08
-    behavior_score += clamp(float(signals.get("interview_completion_rate") or 0.0), 0.0, 1.0) * 0.08
-    offer_acceptance = float(signals.get("offer_acceptance_rate") or -1.0)
+    behavior_score += clamp(numeric_signal(signals.get("recruiter_response_rate")), 0.0, 1.0) * 0.22
+    behavior_score += clamp(1.0 - numeric_signal(signals.get("avg_response_time_hours")) / 168.0, 0.0, 1.0) * 0.08
+    behavior_score += clamp(numeric_signal(signals.get("interview_completion_rate")), 0.0, 1.0) * 0.08
+    behavior_score += clamp(numeric_signal(signals.get("profile_completeness_score")) / 100.0, 0.0, 1.0) * 0.05
+    behavior_score += clamp(numeric_signal(signals.get("profile_views_received_30d")) / 80.0, 0.0, 1.0) * 0.02
+    behavior_score += clamp(numeric_signal(signals.get("applications_submitted_30d")) / 12.0, 0.0, 1.0) * 0.01
+    offer_acceptance = numeric_signal(signals.get("offer_acceptance_rate"), -1.0)
     if offer_acceptance >= 0:
         behavior_score += offer_acceptance * 0.04
-    behavior_score += clamp(float(signals.get("profile_completeness_score") or 0.0) / 100.0, 0.0, 1.0) * 0.05
-    github_score = float(signals.get("github_activity_score") or -1.0)
+    github_score = numeric_signal(signals.get("github_activity_score"), -1.0)
     if github_score >= 0:
         behavior_score += clamp(github_score / 100.0, 0.0, 1.0) * 0.04
-    behavior_score += clamp(math.log1p(float(signals.get("saved_by_recruiters_30d") or 0.0)) / 2.0, 0.0, 1.0) * 0.03
-    behavior_score += clamp(math.log1p(float(signals.get("search_appearance_30d") or 0.0)) / 6.0, 0.0, 1.0) * 0.02
+    behavior_score += clamp(math.log1p(numeric_signal(signals.get("saved_by_recruiters_30d"))) / 2.0, 0.0, 1.0) * 0.03
+    behavior_score += clamp(math.log1p(numeric_signal(signals.get("search_appearance_30d"))) / 6.0, 0.0, 1.0) * 0.02
     behavior_score += 0.03 if signals.get("verified_email") else 0.0
     behavior_score += 0.03 if signals.get("verified_phone") else 0.0
     behavior_score += 0.02 if signals.get("linkedin_connected") else 0.0
@@ -306,26 +385,35 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
         months = months_since(last_active)
         recency_score = clamp(1.0 - months / 18.0, 0.0, 1.0) * 0.15
 
-    endorse = clamp(float(signals.get("endorsements_received") or 0.0) / 80.0, 0.0, 1.0) * 0.05
-    connections = clamp(float(signals.get("connection_count") or 0.0) / 500.0, 0.0, 1.0) * 0.03
+    endorse = clamp(numeric_signal(signals.get("endorsements_received")) / 80.0, 0.0, 1.0) * 0.05
+    connections = clamp(numeric_signal(signals.get("connection_count")) / 500.0, 0.0, 1.0) * 0.03
+    activity_balance = clamp((numeric_signal(signals.get("profile_views_received_30d")) + 1.0) / (numeric_signal(signals.get("applications_submitted_30d")) + 3.0), 0.0, 5.0)
+    activity_score = clamp(activity_balance / 3.0, 0.0, 1.0) * 0.015
 
     raw_score = (
         0.22 * experience_score
         + 0.18 * clamp(role_hits / 4.0, 0.0, 1.0)
         + 0.18 * clamp((role_experience + evidence_hits + 0.75 * product_hits) / 12.0, 0.0, 1.0)
         + 0.12 * clamp(skill_hits / 5.0, 0.0, 1.0)
+        + 0.09 * assessment_score
         + location_score
+        + notice_score
+        + salary_score
+        + signup_score
         + behavior_score
         + recency_score
         + endorse
         + connections
+        + activity_score
         + 0.08 * clamp((profile.get("years_of_experience") or 0.0) / 15.0, 0.0, 1.0)
     )
 
     raw_score -= consulting_penalty
     raw_score -= keyword_stuffer_penalty
 
-    raw_score = clamp(raw_score, 0.0, 1.0)
+    # Compress the unbounded weighted sum into a stable 0-1 range so the
+    # submission has meaningful separation instead of saturating at 1.0.
+    raw_score = 1.0 / (1.0 + math.exp(-2.8 * (raw_score - 0.9)))
 
     top_reasons = []
     current_title = profile.get("current_title") or profile.get("headline") or "candidate"
@@ -333,10 +421,14 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
         top_reasons.append("production ML/search experience")
     if skill_hits >= 3:
         top_reasons.append(f"{skill_hits} relevant AI skills")
+    if assessment_score >= 0.55:
+        top_reasons.append("strong Redrob skill assessments")
     if behavior_score >= 0.35:
         top_reasons.append("strong engagement signals")
     if location_hits or signals.get("willing_to_relocate"):
         top_reasons.append("location-compatible")
+    if notice_period <= 30:
+        top_reasons.append("short notice period")
     if consulting_only and raw_score < 0.6:
         top_reasons.append("consulting-only career path")
     if not top_reasons:
