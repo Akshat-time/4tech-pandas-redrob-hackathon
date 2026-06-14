@@ -1,0 +1,51 @@
+# Redrob Hackathon — Submission Metadata
+
+team_name: "4Tech Pandas"
+
+primary_contact:
+  name: "Akshat"
+  email: "your-email@example.com"
+  phone: "+91-XXXXXXXXXX"
+
+team_members:
+  - name: "Akshat"
+    email: "your-email@example.com"
+    role: "ML Engineer"
+
+github_repo: "https://github.com/Akshat-time/4tech-pandas-redrob-hackathon"
+
+sandbox_link: "https://YOUR-SANDBOX-LINK-HERE"
+
+reproduce_command: "python India_runs_data_and_ai_challenge/ranker.py India_runs_data_and_ai_challenge/candidates.jsonl --output India_runs_data_and_ai_challenge/submission.csv --top-k 100"
+
+compute:
+  platform: "Windows local machine"
+  cpu_cores: 8
+  ram_gb: 16
+  python_version: "3.14"
+  os: "Windows"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: false
+  pre_computation_time_minutes: 0
+
+ai_tools_used:
+  - "Claude"
+  - "GitHub Copilot"
+
+ai_usage_summary: |
+  Used Claude for challenge interpretation, repository setup, and ranking logic.
+  Used GitHub Copilot for code completion and editing support.
+  No candidate data was sent to an external model.
+
+methodology_summary: |
+  Rule-based ranker that prioritizes genuine senior AI/search/retrieval fit over keyword matching.
+  The score combines role history, production evidence, relevant AI skills, location fit, and behavioral signals.
+  Consulting-only and keyword-stuffed profiles are penalized. The result is deterministic and reproducible on CPU.
+
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: false
+  reproduction_tested: true
