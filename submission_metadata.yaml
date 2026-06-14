@@ -14,7 +14,7 @@ team_members:
 
 github_repo: "https://github.com/Akshat-time/4tech-pandas-redrob-hackathon"
 
-sandbox_link: "https://YOUR-SANDBOX-LINK-HERE"
+sandbox_link: "https://pandas-redrob-hackathon.streamlit.app"
 
 reproduce_command: "python India_runs_data_and_ai_challenge/ranker.py India_runs_data_and_ai_challenge/candidates.jsonl --output India_runs_data_and_ai_challenge/submission.csv --top-k 100"
 
