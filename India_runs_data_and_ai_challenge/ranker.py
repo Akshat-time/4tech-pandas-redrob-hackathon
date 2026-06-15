@@ -157,6 +157,104 @@ HIGH_ENGAGEMENT_SKILLS = {
     "xgboost",
 }
 
+JD_CONCEPT_GROUPS = {
+    "ai_search_ranker": {
+        "phrases": [
+            "ai engineer",
+            "ml engineer",
+            "machine learning",
+            "search engineer",
+            "ranking",
+            "retrieval",
+            "recommendation",
+            "matching",
+        ],
+        "weight": 1.7,
+    },
+    "production_systems": {
+        "phrases": [
+            "production",
+            "deployed",
+            "shipped",
+            "users",
+            "platform",
+            "service",
+            "monitoring",
+            "on-call",
+            "scale",
+        ],
+        "weight": 1.5,
+    },
+    "vector_retrieval": {
+        "phrases": [
+            "embeddings",
+            "vector search",
+            "vector databases",
+            "milvus",
+            "faiss",
+            "qdrant",
+            "weaviate",
+            "pinecone",
+            "elasticsearch",
+            "opensearch",
+        ],
+        "weight": 1.9,
+    },
+    "evaluation_experimentation": {
+        "phrases": [
+            "ndcg",
+            "mrr",
+            "map",
+            "offline",
+            "online",
+            "a/b test",
+            "ab test",
+            "evaluation",
+            "benchmark",
+        ],
+        "weight": 1.8,
+    },
+    "llm_finetuning": {
+        "phrases": [
+            "llm",
+            "fine-tuning",
+            "finetuning",
+            "lora",
+            "qlora",
+            "peft",
+            "prompt",
+        ],
+        "weight": 1.1,
+    },
+    "product_company_signal": {
+        "phrases": [
+            "startup",
+            "product",
+            "platform",
+            "saas",
+            "marketplace",
+            "consumer",
+            "fintech",
+            "healthtech",
+            "edtech",
+        ],
+        "weight": 1.25,
+    },
+    "availability": {
+        "phrases": [
+            "open to work",
+            "active",
+            "recent",
+            "response rate",
+            "verified",
+            "relocate",
+            "notice period",
+            "interview",
+        ],
+        "weight": 1.0,
+    },
+}
+
 
 def load_candidates(path: Path) -> Iterable[dict]:
     if path.suffix.lower() == ".gz":
@@ -228,6 +326,31 @@ def months_since(datestr: str, today: date | None = None) -> int:
     return max(0, (today.year - parsed.year) * 12 + today.month - parsed.month)
 
 
+def phrase_hits(text: str, phrases: Iterable[str]) -> int:
+    return sum(1 for phrase in phrases if phrase in text)
+
+
+def concept_fit_score(text: str) -> tuple[float, list[str]]:
+    weighted_total = 0.0
+    max_total = 0.0
+    matched = []
+
+    for concept_name, concept in JD_CONCEPT_GROUPS.items():
+        phrases = concept["phrases"]
+        weight = concept["weight"]
+        hits = phrase_hits(text, phrases)
+        max_total += weight
+
+        if hits:
+            weighted_total += weight * (1.0 - math.exp(-hits / 1.5))
+            matched.append(concept_name)
+
+    if not max_total:
+        return 0.0, []
+
+    return weighted_total / max_total, matched
+
+
 def numeric_signal(value, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -276,6 +399,7 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     skills = candidate.get("skills", [])
 
     text = flatten_text(candidate)
+    concept_score, matched_concepts = concept_fit_score(text)
     title_text = " ".join(
         [
             profile.get("headline", ""),
@@ -397,16 +521,17 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     activity_score = clamp(activity_balance / 3.0, 0.0, 1.0) * 0.015
 
     raw_score = (
-        0.24 * experience_score
-        + 0.21 * clamp(role_hits / 4.0, 0.0, 1.0)
-        + 0.22 * clamp((role_experience + evidence_hits + 0.75 * product_hits) / 12.0, 0.0, 1.0)
+        0.22 * experience_score
+        + 0.18 * clamp(role_hits / 4.0, 0.0, 1.0)
+        + 0.18 * clamp((role_experience + evidence_hits + 0.75 * product_hits) / 12.0, 0.0, 1.0)
         + 0.10 * clamp(skill_hits / 5.0, 0.0, 1.0)
-        + 0.12 * assessment_score
+        + 0.10 * assessment_score
+        + 0.18 * concept_score
         + location_score
         + notice_score
         + salary_score
         + signup_score
-        + 0.85 * behavior_score
+        + 0.70 * behavior_score
         + recency_score
         + endorse
         + connections
@@ -430,6 +555,8 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
         top_reasons.append(f"{skill_hits} relevant AI skills")
     if assessment_score >= 0.55:
         top_reasons.append("strong Redrob skill assessments")
+    if matched_concepts:
+        top_reasons.append("JD semantic fit")
     if title_alignment > 0.04:
         top_reasons.append("title aligned with JD")
     if behavior_score >= 0.35:
