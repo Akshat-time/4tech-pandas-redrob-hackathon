@@ -441,6 +441,16 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     if skill_hits >= 6 and non_product_title and role_experience < 2.0:
         keyword_stuffer_penalty = 0.28
 
+    title_mismatch_penalty = 0.0
+    if non_product_title and role_experience < 2.5 and concept_score < 0.25:
+        title_mismatch_penalty = 0.22
+    elif non_product_title and role_experience < 1.2 and concept_score < 0.18:
+        title_mismatch_penalty = 0.32
+
+    keyword_stuff_penalty = 0.0
+    if skill_hits >= 7 and concept_score < 0.25 and not any(keyword in title_text for keyword in ["ai", "ml", "search", "ranking", "retrieval", "recommendation"]):
+        keyword_stuff_penalty = 0.18
+
     title_alignment = 0.0
     if any(keyword in title_text for keyword in ["ai", "ml", "machine learning", "search", "ranking", "retrieval", "recommendation", "data scientist", "embeddings", "vector", "llm"]):
         title_alignment += 0.05
@@ -542,6 +552,8 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
 
     raw_score -= consulting_penalty
     raw_score -= keyword_stuffer_penalty
+    raw_score -= title_mismatch_penalty
+    raw_score -= keyword_stuff_penalty
 
     # Compress the unbounded weighted sum into a stable 0-1 range so the
     # submission has meaningful separation instead of saturating at 1.0.
@@ -556,7 +568,7 @@ def score_candidate(candidate: dict) -> tuple[float, str]:
     if assessment_score >= 0.55:
         top_reasons.append("strong Redrob skill assessments")
     if matched_concepts:
-        top_reasons.append("JD semantic fit")
+        top_reasons.append("strong JD semantic fit")
     if title_alignment > 0.04:
         top_reasons.append("title aligned with JD")
     if behavior_score >= 0.35:
